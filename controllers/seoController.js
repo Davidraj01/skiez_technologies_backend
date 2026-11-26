@@ -14,22 +14,20 @@ const STATIC_ROUTES = [
   { path: "/terms", priority: "0.2", changefreq: "yearly" },
 ];
 
-// Bots used by AI assistants / AI search (GEO)
-const AI_BOTS = [
-  "GPTBot",
-  "OAI-SearchBot",
-  "ChatGPT-User",
-  "ClaudeBot",
-  "Claude-User",
-  "Claude-SearchBot",
-  "PerplexityBot",
-  "Perplexity-User",
-  "Google-Extended",
-  "Applebot-Extended",
-  "CCBot",
-  "Bytespider",
-  "meta-externalagent",
+// Bots used by AI assistants / AI search (GEO), grouped by purpose for a readable robots.txt
+const AI_BOT_GROUPS = [
+  { label: "OpenAI: ChatGPT search, browsing and training", bots: ["OAI-SearchBot", "ChatGPT-User", "GPTBot"] },
+  { label: "Anthropic: Claude search, browsing and training", bots: ["Claude-SearchBot", "Claude-User", "ClaudeBot"] },
+  { label: "Perplexity", bots: ["PerplexityBot", "Perplexity-User"] },
+  { label: "Google Gemini / AI Overviews training control", bots: ["Google-Extended"] },
+  { label: "Apple Intelligence", bots: ["Applebot-Extended"] },
+  { label: "Microsoft Copilot / Bing", bots: ["Bingbot"] },
+  { label: "Meta AI", bots: ["meta-externalagent"] },
+  { label: "Common Crawl (dataset used by many AI models)", bots: ["CCBot"] },
 ];
+
+// Aggressive scrapers that bring no search or answer visibility: always blocked
+const BLOCKED_SCRAPERS = ["Bytespider"];
 
 const escapeXml = (s = "") =>
   String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]);
@@ -132,11 +130,34 @@ export const sitemapXml = asyncHandler(async (req, res) => {
 export const robotsTxt = asyncHandler(async (req, res) => {
   const settings = await SiteSettings.getSingleton();
   const base = baseUrl(settings);
-  const lines = ["User-agent: *", "Allow: /", "Disallow: /admin", ""];
+  const allow = settings.allowAiCrawlers;
 
-  if (!settings.allowAiCrawlers) {
-    for (const bot of AI_BOTS) lines.push(`User-agent: ${bot}`, "Disallow: /", "");
+  // Note: a bot that matches a named group ignores the "*" group, so every group repeats
+  // the /admin rule.
+  const lines = [
+    `# robots.txt for ${settings.siteName || "this site"}`,
+    "# AI crawler access is managed in Admin -> SEO -> \"Allow AI crawlers\".",
+    `# Current policy: AI search and assistant bots are ${allow ? "ALLOWED (so the site can appear in AI answers)" : "BLOCKED"}.`,
+    "",
+    "# All crawlers (Google, Bing, others)",
+    "User-agent: *",
+    "Allow: /",
+    "Disallow: /admin",
+    "",
+  ];
+
+  for (const group of AI_BOT_GROUPS) {
+    lines.push(`# ${group.label}`);
+    for (const bot of group.bots) lines.push(`User-agent: ${bot}`);
+    // Bingbot is a normal search crawler: never block it, even when AI crawlers are off
+    const blockThis = !allow && !group.bots.includes("Bingbot");
+    lines.push(...(blockThis ? ["Disallow: /"] : ["Allow: /", "Disallow: /admin"]), "");
   }
+
+  lines.push("# Aggressive scrapers (no search or AI-answer benefit)");
+  for (const bot of BLOCKED_SCRAPERS) lines.push(`User-agent: ${bot}`);
+  lines.push("Disallow: /", "");
+
   if (base) lines.push(`Sitemap: ${base}/sitemap.xml`);
 
   res.set("Cache-Control", "public, max-age=3600").type("text/plain").send(lines.join("\n") + "\n");
