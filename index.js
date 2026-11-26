@@ -10,6 +10,9 @@ import galleryRoutes from "./routes/galleryRoutes.js";
 import adminGalleryRoutes from "./routes/adminGalleryRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import adminContactRoutes from "./routes/adminContactRoutes.js";
+import seoRoutes from "./routes/seoRoutes.js";
+import adminSeoRoutes from "./routes/adminSeoRoutes.js";
+import { sitemapXml, robotsTxt, llmsTxt } from "./controllers/seoController.js";
 
 dotenv.config();
 
@@ -26,6 +29,13 @@ app.use("/api/gallery", galleryRoutes);
 app.use("/api/admin/gallery", adminGalleryRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/admin/contact", adminContactRoutes);
+app.use("/api/seo", seoRoutes);
+app.use("/api/admin/seo", adminSeoRoutes);
+
+// Crawler files at the root as well, so the website host can proxy them as-is
+app.get("/sitemap.xml", sitemapXml);
+app.get("/robots.txt", robotsTxt);
+app.get("/llms.txt", llmsTxt);
 
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
